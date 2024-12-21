@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>双人对战俄罗斯方块</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            height: 100vh;
+        }
+        .container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+        .section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+            border: 2px solid #333;
+            box-sizing: border-box;
+        }
+        .middle {
+            flex-direction: column;
+            justify-content: space-between;
+            border: 2px solid #333;
+        }
+        .title {
+            text-align: center;
+            font-size: 36px; /* 增加字体大小 */
+            margin: 10px 0;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: repeat(3, 1fr);
+            width: 100%;
+            text-align: center;
+        }
+        .info-grid div {
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        .next-block {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+        }
+        .next-block canvas {
+            width: 80px; /* Adjusted for 4x4 region */
+            height: 80px; /* Adjusted for 4x4 region */
+            background-color: #fff;
+            border: 1px solid #333;
+        }
+        canvas {
+            width: 360px; /* 12 blocks * 30 pixels */
+            height: 660px; /* 22 blocks * 30 pixels */
+            background-color: #fff;
+            border: 2px solid #333;
+        }
+        #result {
+            display: none;
+            margin-top: 20px;
+            font-size: 20px;
+        }
+        #result .winner {
+            font-size: 30px; /* 增加获胜方字体大小 */
+        }
+        #startButton {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="section">
+            <canvas id="leftGameCanvas" width="360" height="660"></canvas>
+        </div>
+        <div class="section middle">
+            <div class="title">双人对战<br>俄罗斯方块</div>
+            <button id="startButton">开始游戏</button>
+            <div class="next-block">
+                <canvas id="leftNextBlockShape" width="80" height="80"></canvas>
+                <canvas id="rightNextBlockShape" width="80" height="80"></canvas>
+            </div>
+            <div class="info-grid">
+                <div id="leftSpeed">速度: 1.0</div>
+                <div id="rightSpeed">速度: 1.0</div>
+                <div id="leftCleared">消除行数: 0</div>
+                <div id="rightCleared">消除行数: 0</div>
+            </div>
+            <div id="result"></div>
+        </div>
+        <div class="section">
+            <canvas id="rightGameCanvas" width="360" height="660"></canvas>
+        </div>
+    </div>
+    <script>
+        const grid = 30; // 基本方块大小保持为30像素
+        const tetrominoes = [
+            { shape: [[1, 1, 1, 1]], color: 'cyan' },
+            { shape: [[1, 1], [1, 1]], color: 'yellow' },
+            { shape: [[0, 1, 0], [1, 1, 1]], color: 'purple' },
+            { shape: [[1, 0, 0], [1, 1, 1]], color: 'blue' },
+            { shape: [[0, 0, 1], [1, 1, 1]], color: 'orange' },
+            { shape: [[0, 1, 1], [1, 1, 0]], color: 'green' },
+            { shape: [[1, 1, 0], [0, 1, 1]], color: 'red' }
+        ];
+
+        let leftSpeed = 1.0;
+        let rightSpeed = 1.0;
+        let leftClearedLines = 0;
+        let rightClearedLines = 0;
+        let startTime;
+        let gameOver = false;
+
+        function updateSpeedDisplay() {
+            document.getElementById('leftSpeed').textContent = `速度: ${leftSpeed.toFixed(1)}`;
+            document.getElementById('rightSpeed').textContent = `速度: ${rightSpeed.toFixed(1)}`;
+        }
+
+        function showResult(winner) {
+            const resultDiv = document.getElementById('result');
+            const duration = Math.floor((Date.now() - startTime) / 1000);
+            resultDiv.innerHTML = `
+                对战结束！<br>
+                持续时间: ${duration} 秒<br>
+                左方消除行数: ${leftClearedLines}<br>
+                右方消除行数: ${rightClearedLines}<br>
+                <span class="winner">获胜方: ${winner}</span>
+            `;
+            resultDiv.style.display = 'block';
+        }
+
+        function createTetrisGame(canvasId, controls, speedId, nextBlockId, clearedId, nextBlockShapeId) {
+            const canvas = document.getElementById(canvasId);
+            const context = canvas.getContext('2d');
+            const nextBlockElement = document.getElementById(nextBlockId);
+            const clearedElement = document.getElementById(clearedId);
+            const nextBlockShapeCanvas = document.getElementById(nextBlockShapeId);
+            const nextBlockShapeContext = nextBlockShapeCanvas.getContext('2d');
+
+            let board = Array.from({ length: 22 }, () => Array(12).fill(0)); // 调整为22行和12列
+            let tetromino = getRandomTetromino();
+            let nextTetromino = getRandomTetromino(); // 初始化下一个方块
+            let posX = 3, posY = 0;
+            let gameOverLocal = false;
+            let dropSpeedMultiplier = 1; // 下降速度倍增器
+            let dropCount = 0; // 记录按下“向下”或“x”键的次数
+            let dropTimeout; // 用于清除定时器
+
+            function getRandomTetromino() {
+                const { shape, color } = tetrominoes[Math.floor(Math.random() * tetrominoes.length)];
+                return { shape, color };
+            }
+
+            function drawBoard() {
+                context.clearRect(0, 0, canvas.width, canvas.height);
+                board.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value) {
+                            context.fillStyle = value;
+                            context.fillRect(x * grid, y * grid, grid - 1, grid - 1);
+                        }
+                    });
+                });
+                drawTetromino();
+            }
+
+            function drawTetromino() {
+                tetromino.shape.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value) {
+                            context.fillStyle = tetromino.color;
+                            context.fillRect((posX + x) * grid, (posY + y) * grid, grid - 1, grid - 1);
+                        }
+                    });
+                });
+            }
+
+            function drawNextBlockShape() {
+                nextBlockShapeContext.clearRect(0, 0, nextBlockShapeCanvas.width, nextBlockShapeCanvas.height);
+                nextTetromino.shape.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value) {
+                            nextBlockShapeContext.fillStyle = nextTetromino.color;
+                            nextBlockShapeContext.fillRect(x * 20, y * 20, 19, 19);
+                        }
+                    });
+                });
+            }
+
+            function moveTetromino(dir) {
+                posX += dir;
+                if (collision()) {
+                    posX -= dir;
+                }
+            }
+
+            function dropTetromino() {
+                posY++;
+                if (collision()) {
+                    posY--;
+                    merge();
+                    resetTetromino();
+                    if (collision()) {
+                        gameOverLocal = true;
+                    }
+                }
+            }
+
+            function rotateTetromino() {
+                const rotatedShape = tetromino.shape[0].map((_, index) =>
+                    tetromino.shape.map(row => row[index]).reverse()
+                );
+                const originalShape = tetromino.shape;
+                tetromino.shape = rotatedShape;
+                if (collision()) {
+                    tetromino.shape = originalShape;
+                }
+            }
+
+            function collision() {
+                return tetromino.shape.some((row, y) => {
+                    return row.some((value, x) => {
+                        let newX = posX + x;
+                        let newY = posY + y;
+                        return value && (newY >= 22 || newX < 0 || newX >= 12 || board[newY][newX]); // 调整为22行和12列
+                    });
+                });
+            }
+
+            function merge() {
+                tetromino.shape.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value) {
+                            board[posY + y][posX + x] = tetromino.color;
+                        }
+                    });
+                });
+                clearRows();
+            }
+
+            function clearRows() {
+                let linesCleared = 0;
+                board = board.reduce((acc, row) => {
+                    if (row.every(cell => cell)) {
+                        acc.unshift(Array(12).fill(0)); // 调整为12列
+                        linesCleared++;
+                    } else {
+                        acc.push(row);
+                    }
+                    return acc;
+                }, []);
+                if (linesCleared > 0) {
+                    if (canvasId === 'leftGameCanvas') {
+                        leftClearedLines += linesCleared;
+                    } else {
+                        rightClearedLines += linesCleared;
+                    }
+                    clearedElement.textContent = `消除行数: ${canvasId === 'leftGameCanvas' ? leftClearedLines : rightClearedLines}`;
+                    // 增加对手的速度
+                    const opponentSpeedElement = document.getElementById(canvasId === 'leftGameCanvas' ? 'rightSpeed' : 'leftSpeed');
+                    let opponentSpeed = canvasId === 'leftGameCanvas' ? rightSpeed : leftSpeed;
+                    opponentSpeed *= 1.1; // 增加10%的速度
+                    if (canvasId === 'leftGameCanvas') {
+                        rightSpeed = opponentSpeed;
+                    } else {
+                        leftSpeed = opponentSpeed;
+                    }
+                    updateSpeedDisplay();
+                }
+            }
+
+            function resetTetromino() {
+                tetromino = nextTetromino;
+                nextTetromino = getRandomTetromino();
+                posX = 3;
+                posY = 0;
+                drawNextBlockShape();
+                dropSpeedMultiplier = 1; // 重置下降速度倍增器
+                dropCount = 0; // 重置按键计数
+                clearTimeout(dropTimeout); // 清除定时器
+            }
+
+            document.addEventListener('keydown', (event) => {
+                if (gameOver || gameOverLocal) return;
+                if (event.key === controls.left) {
+                    moveTetromino(-1);
+                } else if (event.key === controls.right) {
+                    moveTetromino(1);
+                } else if (event.key === controls.down) {
+                    dropCount++;
+                    dropSpeedMultiplier *= 2; // 每按一次加倍
+                    if (dropCount >= 3) {
+                        posY = Math.min(posY + 1, 21); // 直接落地
+                    }
+                    dropTetromino();
+                    clearTimeout(dropTimeout);
+                    dropTimeout = setTimeout(() => {
+                        dropSpeedMultiplier = 1; // 重置倍增器
+                        dropCount = 0; // 重置按键计数
+                    }, 1000); // 1秒内有效
+                } else if (event.key === controls.rotate) {
+                    rotateTetromino();
+                }
+                drawBoard();
+            });
+
+            function gameLoop() {
+                if (gameOver || gameOverLocal) {
+                    if (gameOverLocal) {
+                        gameOver = true;
+                        const winner = canvasId === 'leftGameCanvas' ? '右方' : '左方';
+                        showResult(winner);
+                    }
+                    context.fillStyle = 'black';
+                    context.font = '48px Arial';
+                    context.fillText('游戏结束', 25, canvas.height / 2);
+                    return;
+                }
+                dropTetromino();
+                drawBoard();
+                setTimeout(gameLoop, 1000 / (canvasId === 'leftGameCanvas' ? leftSpeed * dropSpeedMultiplier : rightSpeed * dropSpeedMultiplier)); // 根据速度调整下落间隔
+            }
+
+            // 初始绘制下一个方块
+            drawNextBlockShape();
+            gameLoop();
+        }
+
+        function startGame() {
+            leftSpeed = 1.0;
+            rightSpeed = 1.0;
+            leftClearedLines = 0;
+            rightClearedLines = 0;
+            gameOver = false;
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('leftCleared').textContent = '消除行数: 0';
+            document.getElementById('rightCleared').textContent = '消除行数: 0';
+            startTime = Date.now();
+            createTetrisGame('leftGameCanvas', { left: 'z', down: 'x', right: 'c', rotate: 's' }, 'leftSpeed', 'leftNextBlock', 'leftCleared', 'leftNextBlockShape');
+            createTetrisGame('rightGameCanvas', { left: 'ArrowLeft', down: 'ArrowDown', right: 'ArrowRight', rotate: 'ArrowUp' }, 'rightSpeed', 'rightNextBlock', 'rightCleared', 'rightNextBlockShape');
+            updateSpeedDisplay();
+        }
+
+        document.getElementById('startButton').addEventListener('click', startGame);
+    </script>
+</body>
+</html>
