@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>扫雷游戏</title>
+    <style>
+        .container {
+            max-width: 400px;
+            margin: 20px auto;
+            text-align: center;
+        }
+
+        .game-info {
+            margin-bottom: 20px;
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(10, 30px);
+            grid-template-rows: repeat(10, 30px);
+            gap: 1px;
+            background-color: #ccc;
+            border: 1px solid #999;
+            margin: 0 auto;
+        }
+
+        .cell {
+            width: 30px;
+            height: 30px;
+            background-color: #eee;
+            border: 1px solid #ccc;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .cell.revealed {
+            background-color: #ddd;
+        }
+
+        .cell.mine {
+            background-color: red;
+        }
+
+        .cell.flagged {
+            background-color: yellow;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="game-info">
+            <button id="new-game">新游戏</button>
+            <span>剩余地雷: <span id="mines-count">10</span></span>
+        </div>
+        <div id="board"></div>
+    </div>
+
+    <script>
+        class Minesweeper {
+            constructor(rows = 10, cols = 10, mines = 10) {
+                this.rows = rows;
+                this.cols = cols;
+                this.mines = mines;
+                this.board = [];
+                this.gameOver = false;
+                this.minesCount = mines;
+                this.init();
+            }
+
+            init() {
+                // 创建空板
+                for (let i = 0; i < this.rows; i++) {
+                    this.board[i] = [];
+                    for (let j = 0; j < this.cols; j++) {
+                        this.board[i][j] = {
+                            isMine: false,
+                            revealed: false,
+                            flagged: false,
+                            neighborMines: 0
+                        };
+                    }
+                }
+
+                // 随机放置地雷
+                let minesPlaced = 0;
+                while (minesPlaced < this.mines) {
+                    const row = Math.floor(Math.random() * this.rows);
+                    const col = Math.floor(Math.random() * this.cols);
+                    if (!this.board[row][col].isMine) {
+                        this.board[row][col].isMine = true;
+                        minesPlaced++;
+                    }
+                }
+
+                // 计算每个格子周围的地雷数
+                for (let i = 0; i < this.rows; i++) {
+                    for (let j = 0; j < this.cols; j++) {
+                        if (!this.board[i][j].isMine) {
+                            this.board[i][j].neighborMines = this.countNeighborMines(i, j);
+                        }
+                    }
+                }
+            }
+
+            countNeighborMines(row, col) {
+                let count = 0;
+                for (let i = -1; i <= 1; i++) {
+                    for (let j = -1; j <= 1; j++) {
+                        const newRow = row + i;
+                        const newCol = col + j;
+                        if (newRow >= 0 && newRow < this.rows && 
+                            newCol >= 0 && newCol < this.cols && 
+                            this.board[newRow][newCol].isMine) {
+                            count++;
+                        }
+                    }
+                }
+                return count;
+            }
+
+            reveal(row, col) {
+                if (this.gameOver || this.board[row][col].flagged || this.board[row][col].revealed) {
+                    return;
+                }
+
+                this.board[row][col].revealed = true;
+
+                if (this.board[row][col].isMine) {
+                    this.gameOver = true;
+                    this.revealAll();
+                    alert('游戏结束！');
+                    return;
+                }
+
+                if (this.board[row][col].neighborMines === 0) {
+                    this.revealNeighbors(row, col);
+                }
+
+                if (this.checkWin()) {
+                    alert('恭喜你赢了！');
+                    this.gameOver = true;
+                }
+            }
+
+            revealNeighbors(row, col) {
+                for (let i = -1; i <= 1; i++) {
+                    for (let j = -1; j <= 1; j++) {
+                        const newRow = row + i;
+                        const newCol = col + j;
+                        if (newRow >= 0 && newRow < this.rows && 
+                            newCol >= 0 && newCol < this.cols && 
+                            !this.board[newRow][newCol].revealed) {
+                            this.reveal(newRow, newCol);
+                        }
+                    }
+                }
+            }
+
+            toggleFlag(row, col) {
+                if (!this.board[row][col].revealed) {
+                    this.board[row][col].flagged = !this.board[row][col].flagged;
+                    this.minesCount += this.board[row][col].flagged ? -1 : 1;
+                    document.getElementById('mines-count').textContent = this.minesCount;
+                }
+            }
+
+            revealAll() {
+                for (let i = 0; i < this.rows; i++) {
+                    for (let j = 0; j < this.cols; j++) {
+                        this.board[i][j].revealed = true;
+                    }
+                }
+            }
+
+            checkWin() {
+                for (let i = 0; i < this.rows; i++) {
+                    for (let j = 0; j < this.cols; j++) {
+                        if (!this.board[i][j].isMine && !this.board[i][j].revealed) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+        }
+
+        // 游戏初始化
+        let game = new Minesweeper();
+        const board = document.getElementById('board');
+
+        function renderBoard() {
+            board.innerHTML = '';
+            for (let i = 0; i < game.rows; i++) {
+                for (let j = 0; j < game.cols; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    
+                    if (game.board[i][j].revealed) {
+                        cell.classList.add('revealed');
+                        if (game.board[i][j].isMine) {
+                            cell.classList.add('mine');
+                            cell.textContent = '💣';
+                        } else if (game.board[i][j].neighborMines > 0) {
+                            cell.textContent = game.board[i][j].neighborMines;
+                        }
+                    } else if (game.board[i][j].flagged) {
+                        cell.classList.add('flagged');
+                        cell.textContent = '🚩';
+                    }
+
+                    cell.addEventListener('click', () => {
+                        game.reveal(i, j);
+                        renderBoard();
+                    });
+
+                    cell.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        game.toggleFlag(i, j);
+                        renderBoard();
+                    });
+
+                    board.appendChild(cell);
+                }
+            }
+        }
+
+        // 初始渲染
+        renderBoard();
+
+        // 新游戏按钮
+        document.getElementById('new-game').addEventListener('click', () => {
+            game = new Minesweeper();
+            renderBoard();
+            document.getElementById('mines-count').textContent = game.mines;
+        });
+    </script>
+</body>
+</html>
