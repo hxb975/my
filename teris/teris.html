@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>双人对战俄罗斯方块</title>
+    <link rel="stylesheet" href="style.css"> <!-- 引入 CSS 文件 -->
+</head>
+<body>
+    <div class="container">
+        <div class="section">
+            <canvas id="leftGameCanvas" width="360" height="660"></canvas>
+        </div>
+        <div class="section middle">
+            <div class="title">双人对战<br>俄罗斯方块</div>
+            <div class="controls">sxzc对应上下左右键，上键翻转，下键加速</div>
+            <button id="startButton">开始游戏</button>
+            <div class="next-block">
+                <canvas id="leftNextBlockShape" width="80" height="80"></canvas>
+                <canvas id="rightNextBlockShape" width="80" height="80"></canvas>
+            </div>
+            <div class="info-grid">
+                <div id="leftSpeed">速度: 1.0</div>
+                <div id="rightSpeed">速度: 1.0</div>
+                <div id="leftCleared">消除行数: 0</div>
+                <div id="rightCleared">消除行数: 0</div>
+            </div>
+            <div id="result"></div>
+        </div>
+        <div class="section">
+            <canvas id="rightGameCanvas" width="360" height="660"></canvas>
+        </div>
+    </div>
+    <script src="script.js"></script> <!-- 引入 JavaScript 文件 -->
+</body>
+</html>
